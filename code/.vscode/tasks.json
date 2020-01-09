@@ -9,15 +9,21 @@
                 "-D_UNICODE",
                 "user32.lib",
                 "/Zi",
-                "/Gm",
+                "/Gm-",
+                "/Zc:inline",
+                "/fp:precise",
                 "/W3",
                 "/GS",
                 "/WX-",
                 "/nologo",
                 "/INCREMENTAL",
                 "/EHsc",
+                "/Fo:",
+                "${fileDirname}\\build\\${fileBasenameNoExtension}.obj",    // 设置obj输出路径
                 "/Fe:",
-                "${fileDirname}\\${fileBasenameNoExtension}.exe",
+                "${fileDirname}\\build\\${fileBasenameNoExtension}.exe",    // 设置exe输出路径
+                "/Fd:",
+                "${fileDirname}\\build\\",                                  // vc0x.pdb输出路径
                 "${file}"
             ]
         },
@@ -30,15 +36,25 @@
                 "-D_UNICODE",
                 "user32.lib",
                 "/Zi",
-                "/Gm",
+                "/Gm-",
+                "/Od",
+                "/sdl",
+                "/Zc:inline",
+                "/fp:precise",
                 "/W3",
+                "/JMC",
+                "/permissive-",
                 "/GS",
                 "/WX-",
                 "/nologo",
                 "/INCREMENTAL",
                 "/EHsc",
+                "/Fo:",
+                "${fileDirname}\\build\\${fileBasenameNoExtension}.obj",    // 设置obj输出路径
                 "/Fe:",
-                "${fileDirname}\\${fileBasenameNoExtension}.exe",
+                "${fileDirname}\\build\\${fileBasenameNoExtension}.exe",    // 设置exe输出路径
+                "/Fd:",
+                "${fileDirname}\\build\\",   
                 "${file}"
             ],
             "problemMatcher": [

@@ -6,6 +6,9 @@
 *.lo
 *.o
 *.obj
+*.idb
+*.pdb
+*.ilk
 
 # Precompiled Headers
 *.gch
