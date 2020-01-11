@@ -9,10 +9,16 @@
 *.idb
 *.pdb
 *.ilk
+*.db
+*.opendb
 
 # Precompiled Headers
 *.gch
 *.pch
+*.ipch
+
+*.log
+*.tlog
 
 # Compiled Dynamic libraries
 *.so
