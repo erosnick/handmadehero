@@ -8,14 +8,45 @@ LRESULT CALLBACK MainWindowCallback(HWND Window, UINT Message, WPARAM WParame, L
     {
     case WM_SIZE:
         break;
+        
+    case WM_ACTIVATEAPP:
+        break;
 
-    case WM_DESTROY:
+    case WM_PAINT:
+    {
+        PAINTSTRUCT Paint;
+
+        HDC DeviceContext = BeginPaint(Window, &Paint);
+
+        int X = Paint.rcPaint.left;
+        int Y = Paint.rcPaint.top;
+        int Width = Paint.rcPaint.right - Paint.rcPaint.left;
+        int Height = Paint.rcPaint.bottom - Paint.rcPaint.top;
+
+        static DWORD Operation = WHITENESS;
+
+        if (Operation == WHITENESS)
+        {
+            Operation = BLACKNESS;
+        }
+        else
+        {
+            Operation = WHITENESS;
+        }
+
+        PatBlt(DeviceContext, X, Y, Width, Height, Operation);
+
+        EndPaint(Window, &Paint);
+    }
+
         break;
 
     case WM_CLOSE:
+        DestroyWindow(Window);
         break;
 
-    case WM_ACTIVATEAPP:
+	case WM_DESTROY:
+		PostQuitMessage(0);
         break;
 
     default:
@@ -44,8 +75,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
                             WS_OVERLAPPEDWINDOW | WS_VISIBLE,           // DWORD dwStyle
                             CW_USEDEFAULT,                              // int X
                             CW_USEDEFAULT,                              // int Y
-                            CW_USEDEFAULT,                              // int nWidth
-                            CW_USEDEFAULT,                              // int nHeight
+                            1280,                                       // int nWidth
+                            720,                                        // int nHeight
                             0,                                          // HWND hWndParent
                             0,                                          // HMENU hMenu
                             hInstance,                                  // HWND hInstance
@@ -57,7 +88,12 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
             while (Message.message != WM_QUIT)
             {
-                BOOL MessageResult = PeekMessage(&Message, WindowHandle, 0, 0, PM_REMOVE);
+                // Pass NULL instead of the window - handle to PeekMessage / GetMessage.
+                // WM_QUIT does not belong to a window, and is also sent after the window 
+                // is destroyed, so the window handle will be invalid then.You usually 
+                // want to handle all messages in the thread message queue, not just 
+                // those associated with a specific window.
+                BOOL MessageResult = PeekMessage(&Message, nullptr, 0, 0, PM_REMOVE);
 
                 if (MessageResult)
                 {
@@ -74,3 +110,4 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
     return 0;
 }
+
