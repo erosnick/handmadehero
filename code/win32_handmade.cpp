@@ -3,6 +3,9 @@
 // DIB stand for Device Independent Bitmap
 static void Win32ResizeDIBSection(int Width, int Height)
 {
+    // TODO(Princerin): Bulletproof this.
+    // Maybe don't free first, free after, then free first if that fails.
+
     BITMAPINFO BitmapInfo;
 
     BitmapInfo.bmiHeader.biSize = sizeof(BitmapInfo.bmiHeader);
