@@ -1,5 +1,31 @@
 #include <Windows.h>
 
+// DIB stand for Device Independent Bitmap
+static void Win32ResizeDIBSection(int Width, int Height)
+{
+    BITMAPINFO BitmapInfo;
+
+    BitmapInfo.bmiHeader.biSize = sizeof(BitmapInfo.bmiHeader);
+    BitmapInfo.bmiHeader.biWidth = Width;
+    BitmapInfo.bmiHeader.biHeight = Height;
+    BitmapInfo.bmiHeader.biPlanes = 1;
+    BitmapInfo.bmiHeader.biBitCount = 32;
+    BitmapInfo.bmiHeader.biCompression = BI_RGB;
+
+
+    void* BitmapMemroy;
+
+    HBITMAP BitmapHandle = CreateDIBSection(DeviceContext, &BitmapInfo, DIB_RGB_COLORS, &BitmapMemroy, 0, 0);
+}
+
+static void Win32UpdateWindow(HDC DeviceContext, int X, int Y, int Width, int Height)
+{
+    StretchDIBits(DeviceContext,
+                  X, Y, Width, Height,
+                  X, Y, Width, Height,
+                  );
+}
+
 LRESULT CALLBACK MainWindowCallback(HWND Window, UINT Message, WPARAM WParame, LPARAM LParam)
 {
     LRESULT Result = 0;
@@ -7,6 +33,15 @@ LRESULT CALLBACK MainWindowCallback(HWND Window, UINT Message, WPARAM WParame, L
     switch (Message)
     {
     case WM_SIZE:
+    {
+        RECT ClientRect;
+
+        GetClientRect(Window, &ClientRect);
+
+        int Width = ClientRect.right - ClientRect.left;
+        int Height = ClientRect.bottom - ClientRect.top;
+        Win32ResizeDIBSection(Width, Height);
+    }
         break;
         
     case WM_ACTIVATEAPP:
@@ -23,18 +58,7 @@ LRESULT CALLBACK MainWindowCallback(HWND Window, UINT Message, WPARAM WParame, L
         int Width = Paint.rcPaint.right - Paint.rcPaint.left;
         int Height = Paint.rcPaint.bottom - Paint.rcPaint.top;
 
-        static DWORD Operation = WHITENESS;
-
-        if (Operation == WHITENESS)
-        {
-            Operation = BLACKNESS;
-        }
-        else
-        {
-            Operation = WHITENESS;
-        }
-
-        PatBlt(DeviceContext, X, Y, Width, Height, Operation);
+        Win32UpdateWindow(Window, X, Y, Width, Height);
 
         EndPaint(Window, &Paint);
     }
