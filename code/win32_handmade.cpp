@@ -11,7 +11,11 @@ static void Win32ResizeDIBSection(int Width, int Height)
     BitmapInfo.bmiHeader.biPlanes = 1;
     BitmapInfo.bmiHeader.biBitCount = 32;
     BitmapInfo.bmiHeader.biCompression = BI_RGB;
-
+    BitmapInfo.bmiHeader.biSizeImage = 0;
+    BitmapInfo.bmiHeader.biXPelsPerMeter = 0;
+    BitmapInfo.bmiHeader.biYPelsPerMeter = 0;
+    BitmapInfo.bmiHeader.biClrUsed = 0;
+    BitmapInfo.bmiHeader.biClrImportant = 0;
 
     void* BitmapMemroy;
 
