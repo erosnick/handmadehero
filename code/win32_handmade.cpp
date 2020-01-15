@@ -81,7 +81,20 @@ internal void RenderWeirdGradient(Win32OffScreenBuffer* GlobalBackBuffer, int XO
 
 internal void PilotPixel(int X, int Y, int Color)
 {
-    ((uint32*)GlobalBackBuffer.Memory)[X + Y * GlobalBackBuffer.Width] = Color;
+	((uint32*)GlobalBackBuffer.Memory)[X + Y * GlobalBackBuffer.Width] = Color;
+}
+
+void RenderNoises(int Count)
+{
+	for (int i = 0; i < Count; i++)
+	{
+		int X = rand() % GlobalBackBuffer.Width;
+		int Y = rand() % GlobalBackBuffer.Height;
+
+		int Color = ((rand() % 256) << 16) | ((rand() % 256) << 8) | ((rand() % 256));
+
+		PilotPixel(X, Y, Color);
+	}
 }
 
 void CleanBitmap(uint8 Red = 255, uint8 Green = 255, uint8 Blue = 255)
@@ -277,6 +290,16 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
             srand(time(nullptr));
 
+            LARGE_INTEGER Frequency;
+            LARGE_INTEGER StartTime;
+            LARGE_INTEGER EndTime;
+
+            QueryPerformanceFrequency(&Frequency);
+            QueryPerformanceCounter(&StartTime);
+
+            double RealTime = StartTime.QuadPart * 1000.0 / Frequency.QuadPart;
+            double SimulationTime = 0.0;
+
             while (Message.message != WM_QUIT)
             {
                 // Pass NULL instead of the window - handle to PeekMessage / GetMessage.
@@ -293,29 +316,35 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
                 }
                 else
                 {
-                    if (Running)
+                    QueryPerformanceCounter(&StartTime);
+
+                    double Now = StartTime.QuadPart * 1000.0 / Frequency.QuadPart;
+
+                    double GameTime = Now - RealTime;
+
+                    while (SimulationTime < GameTime)
                     {
-						RenderWeirdGradient(&GlobalBackBuffer, XOffset, YOffset);
+                        SimulationTime += 16;
 
-						HDC DeviceContext = GetDC(WindowHandle);
+						if (Running)
+						{
+							RenderWeirdGradient(&GlobalBackBuffer, XOffset, YOffset);
+							RenderNoises(10000);
 
-						//for (int i = 0; i < 10000; i++)
-						//{
-						//	int X = rand() % WindowDimension.Width;
-						//	int Y = rand() % WindowDimension.Height;
+							HDC DeviceContext = GetDC(WindowHandle);
 
-						//	int Color = ((rand() % 256) << 16) | ((rand() % 256) << 8) | ((rand() % 256));
+							Win32UpdateWindow(DeviceContext, 0, 0, WindowDimension.Width, WindowDimension.Height);
 
-						//	PilotPixel(X, Y, Color);
-						//}
+							CleanBitmap(100, 149, 237);
 
-						Win32UpdateWindow(DeviceContext, 0, 0, WindowDimension.Width, WindowDimension.Height);
-
-						CleanBitmap(100, 149, 237);
-
-						XOffset++;
-						YOffset++;
+							XOffset++;
+							YOffset++;
+						}
                     }
+
+                    QueryPerformanceCounter(&EndTime);
+
+                    double ElapsedTime = (EndTime.QuadPart - StartTime.QuadPart) * 1000.0 / Frequency.QuadPart;
                 }
             }
         }
