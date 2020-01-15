@@ -1,5 +1,7 @@
+#include "../project/resource.h"
 #include <Windows.h>
 #include <cstdint>
+#include <ctime>
 
 #define internal static
 #define local_persist static
@@ -13,34 +15,53 @@ typedef int8_t int8;
 typedef int16_t int16;
 typedef int32_t int32;
 
-global_variable BITMAPINFO BitmapInfo;
-global_variable void* BitmapMemroy;
-global_variable int BitmapWidth;
-global_variable int BitmapHeight;
-global_variable int BytesPerPixel = 4;
-global_variable int WindowWidth;
-global_variable int WindowHeight;
+global_variable bool Running = true;
 
-void GetClientWindowDimension(HWND Window, int& WindowWidth, int& WindowHeight)
+struct Win32WindowDimension
+{
+    int Width;
+    int Height;
+};
+
+Win32WindowDimension WindowDimension;
+
+Win32WindowDimension GetWindowDimension(HWND Window)
 {
 	RECT WindowRect;
 	GetClientRect(Window, &WindowRect);
 
-	WindowWidth = WindowRect.right - WindowRect.left;
-	WindowHeight = WindowRect.bottom - WindowRect.top;
+    Win32WindowDimension WindowDimension {};
+
+	if (WindowRect.right != 0 && WindowRect.bottom != 0)
+	{
+        WindowDimension.Width = WindowRect.right - WindowRect.left;
+        WindowDimension.Height = WindowRect.bottom - WindowRect.top;
+	}
+
+    return WindowDimension;
 }
 
-internal void RenderWeirdGradient(int XOffset, int YOffset)
+struct Win32OffScreenBuffer
 {
-    int Pitch = BitmapWidth * BytesPerPixel;
+    BITMAPINFO Info;
+    void* Memory;
+    int Width;
+    int Height;
+    int Pitch;
+    int BytesPerPixel = 4;
+};
 
-    uint8* Row = (uint8*)BitmapMemroy;
+Win32OffScreenBuffer GlobalBackBuffer;
 
-    for (int Y = 0; Y < BitmapHeight; Y++)
+internal void RenderWeirdGradient(Win32OffScreenBuffer* GlobalBackBuffer, int XOffset, int YOffset)
+{
+    uint8* Row = (uint8*)GlobalBackBuffer->Memory;
+
+    for (int Y = 0; Y < GlobalBackBuffer->Height; Y++)
     {
         uint32* Pixel = (uint32*)Row;
 
-        for (int X = 0; X < BitmapWidth; X++)
+        for (int X = 0; X < GlobalBackBuffer->Width; X++)
         {
             // Pixel in memory: BB GG RR XX
             // Little Endian Architecture 
@@ -54,7 +75,31 @@ internal void RenderWeirdGradient(int XOffset, int YOffset)
             Pixel++;
         }
 
-        Row += Pitch;
+        Row += GlobalBackBuffer->Pitch;
+    }
+}
+
+internal void PilotPixel(int X, int Y, int Color)
+{
+    ((uint32*)GlobalBackBuffer.Memory)[X + Y * GlobalBackBuffer.Width] = Color;
+}
+
+void CleanBitmap(uint8 Red = 255, uint8 Green = 255, uint8 Blue = 255)
+{
+    uint8* Row = (uint8*)GlobalBackBuffer.Memory;
+
+    for (int Y = 0; Y < GlobalBackBuffer.Height; Y++)
+    {
+        uint32* Pixel = (uint32*)Row;
+
+        for (int X = 0; X < GlobalBackBuffer.Width; X++)
+        {
+            *Pixel = (Red << 16) | (Green << 8) | Blue;
+
+            Pixel++;
+        }
+
+        Row += GlobalBackBuffer.Pitch;
     }
 }
 
@@ -63,51 +108,51 @@ static void Win32ResizeDIBSection(int Width, int Height)
 {
     // TODO(Princerin): Bulletproof this.
     // Maybe don't free first, free after, then free first if that fails.
-    if (BitmapMemroy)
+    if (GlobalBackBuffer.Memory)
     {
         // TODO(Princerin): VirtualProtect()
-        VirtualFree(BitmapMemroy, 0, MEM_RELEASE);
+        VirtualFree(GlobalBackBuffer.Memory, 0, MEM_RELEASE);
     }
 
-    BitmapWidth = Width;
-    BitmapHeight = Height;
+    GlobalBackBuffer.Width = Width;
+    GlobalBackBuffer.Height = Height;
 
-    BitmapInfo.bmiHeader.biSize = sizeof(BitmapInfo.bmiHeader);
-    BitmapInfo.bmiHeader.biWidth = BitmapWidth;
+    GlobalBackBuffer.Info.bmiHeader.biSize = sizeof(GlobalBackBuffer.Info.bmiHeader);
+    GlobalBackBuffer.Info.bmiHeader.biWidth = GlobalBackBuffer.Width;
     // For uncompressed RGB bitmaps, if biHeight is positive, 
     // the bitmap is a bottom-up DIB with the origin at the 
     // lower left corner. If biHeight is negative, the bitmap 
     // is a top-down DIB with the origin at the upper left corner.
-    BitmapInfo.bmiHeader.biHeight = -BitmapHeight;
-    BitmapInfo.bmiHeader.biPlanes = 1;
+    GlobalBackBuffer.Info.bmiHeader.biHeight = -GlobalBackBuffer.Height;
+    GlobalBackBuffer.Info.bmiHeader.biPlanes = 1;
     // We only need 24bits, 32bits for alignment purpose.
     // In this case we can access each pixel at 4bytes boundary.
-    BitmapInfo.bmiHeader.biBitCount = 32;           
-    BitmapInfo.bmiHeader.biCompression = BI_RGB;
+    GlobalBackBuffer.Info.bmiHeader.biBitCount = 32;
+    GlobalBackBuffer.Info.bmiHeader.biCompression = BI_RGB;
+
+    GlobalBackBuffer.Pitch = Width * GlobalBackBuffer.BytesPerPixel;
 
     // NOTE(Princerin): Thank you to Chris Hecker of Spy Party fame
     // for clarifying the deal with StretchDIBits and BitBlt!
     // No more DC for us.
-    int BitmapMemorySize = (Width * Height) * BytesPerPixel;
-    BitmapMemroy = VirtualAlloc(nullptr, BitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
+    int BitmapMemorySize = (Width * Height) * GlobalBackBuffer.BytesPerPixel;
 
-    RenderWeirdGradient(0, 0);
-}
+    // VirtualAlloc always allocate multiples of 4k(4096byte).
+    GlobalBackBuffer.Memory = VirtualAlloc(nullptr, BitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
 
-static void Win32ResizeDIBSection(HWND Window)
-{
-	Win32ResizeDIBSection(WindowWidth, WindowHeight);
+    RenderWeirdGradient(&GlobalBackBuffer, 0, 0);
 }
 
 static void Win32UpdateWindow(HDC DeviceContext, int X, int Y, int WindowWidth, int WindowHeight)
 {
+    // TODO(Princerin): Aspect ratio correction.
 	StretchDIBits(DeviceContext,
 		//X, Y, Width, Height,
 		//X, Y, Width, Height,
-        0, 0, BitmapWidth, BitmapHeight,
         0, 0, WindowWidth, WindowHeight,
-        BitmapMemroy,
-        &BitmapInfo,
+        0, 0, GlobalBackBuffer.Width, GlobalBackBuffer.Height,
+        GlobalBackBuffer.Memory,
+        &GlobalBackBuffer.Info,
         DIB_RGB_COLORS, SRCCOPY);
 }
 
@@ -118,19 +163,31 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WPara
     switch (Message)
     {
     case WM_CREATE:
-
-        GetClientWindowDimension(Window, WindowWidth, WindowHeight);
-
-        Win32ResizeDIBSection(Window);
+    {
+        WindowDimension = GetWindowDimension(Window);
+        Win32ResizeDIBSection(WindowDimension.Width, WindowDimension.Height);
+    }
         break;
+
     case WM_SIZE:
     {
-        GetClientWindowDimension(Window, WindowWidth, WindowHeight);
-        Win32ResizeDIBSection(Window);
+        WindowDimension = GetWindowDimension(Window);
+        //Win32ResizeDIBSection(WindowDimension.Width, WindowDimension.Height);
     }
         break;
         
     case WM_ACTIVATEAPP:
+        // WParam - TRUE for activated, FALSE for deactivated
+        if (WParam)
+        {
+            OutputDebugString(L"Activated\n");
+        }
+        else
+        {
+            OutputDebugString(L"Deactivated\n");
+        }
+  
+        Running = WParam;
         break;
 
     case WM_PAINT:
@@ -144,7 +201,7 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WPara
         int Width = Paint.rcPaint.right - Paint.rcPaint.left;
         int Height = Paint.rcPaint.bottom - Paint.rcPaint.top;
 
-        Win32UpdateWindow(DeviceContext, X, Y, WindowWidth, WindowHeight);
+		Win32UpdateWindow(DeviceContext, X, Y, WindowDimension.Width, WindowDimension.Height);
 
         EndPaint(Window, &Paint);
     }
@@ -178,20 +235,28 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WPara
     return Result;
 }
 
+void Render()
+{
+
+}
+
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow)
 {
-    WNDCLASS WindowClass {};
+    WNDCLASSEX WindowClassEx {};
 
     // TODO(Princerin): Check if HDREDRAW/VREDRAW/OWNDC still matter.
-    WindowClass.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
-    WindowClass.lpfnWndProc = Win32MainWindowCallback;
-    WindowClass.hInstance = hInstance;
-    WindowClass.lpszClassName = L"HandmadeHeroWindowClass";
+    WindowClassEx.cbSize = sizeof(WNDCLASSEX);
+    WindowClassEx.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW; WS_OVERLAPPEDWINDOW;
+    WindowClassEx.lpfnWndProc = Win32MainWindowCallback;
+    WindowClassEx.hInstance = hInstance;
+    WindowClassEx.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_HANDMADEHERO));
+    WindowClassEx.hIconSm = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_HANDMADEHERO));
+    WindowClassEx.lpszClassName = L"HandmadeHeroWindowClass";
 
-    if (RegisterClass(&WindowClass))
+    if (RegisterClassEx(&WindowClassEx))
     {
         HWND WindowHandle = CreateWindowEx(0,                           // DWORD dwExStyle
-                            WindowClass.lpszClassName,                  // LPCSTR lpClassName
+                            WindowClassEx.lpszClassName,                  // LPCSTR lpClassName
                             L"Handmade Hero",                           // LPCSTR lpWindowName
                             WS_OVERLAPPEDWINDOW | WS_VISIBLE,           // DWORD dwStyle
                             CW_USEDEFAULT,                              // int X
@@ -210,6 +275,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 			int XOffset = 0;
 			int YOffset = 0;
 
+            srand(time(nullptr));
+
             while (Message.message != WM_QUIT)
             {
                 // Pass NULL instead of the window - handle to PeekMessage / GetMessage.
@@ -226,19 +293,29 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
                 }
                 else
                 {
-                    RenderWeirdGradient(XOffset, YOffset);
+                    if (Running)
+                    {
+						RenderWeirdGradient(&GlobalBackBuffer, XOffset, YOffset);
 
-                    HDC DeviceContext = GetDC(WindowHandle);
+						HDC DeviceContext = GetDC(WindowHandle);
 
-					int WindowWidth = 0;
-					int WindowHeight = 0;
+						//for (int i = 0; i < 10000; i++)
+						//{
+						//	int X = rand() % WindowDimension.Width;
+						//	int Y = rand() % WindowDimension.Height;
 
-                    GetClientWindowDimension(WindowHandle, WindowWidth, WindowHeight);
+						//	int Color = ((rand() % 256) << 16) | ((rand() % 256) << 8) | ((rand() % 256));
 
-                    Win32UpdateWindow(DeviceContext, 0, 0, WindowWidth, WindowHeight);
-                    ReleaseDC(WindowHandle, DeviceContext);
-                    XOffset++;
-                    YOffset++;
+						//	PilotPixel(X, Y, Color);
+						//}
+
+						Win32UpdateWindow(DeviceContext, 0, 0, WindowDimension.Width, WindowDimension.Height);
+
+						CleanBitmap(100, 149, 237);
+
+						XOffset++;
+						YOffset++;
+                    }
                 }
             }
         }
