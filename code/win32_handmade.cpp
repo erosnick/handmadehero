@@ -1,12 +1,28 @@
 #include <Windows.h>
 
+#define internal static
+#define local_persist static
+#define global_variable static
+
+global_variable BITMAPINFO BitmapInfo;
+global_variable HBITMAP BitmapHandle;
+global_variable HDC DeviceContext;
+global_variable void* BitmapMemroy;
+
 // DIB stand for Device Independent Bitmap
 static void Win32ResizeDIBSection(int Width, int Height)
 {
     // TODO(Princerin): Bulletproof this.
     // Maybe don't free first, free after, then free first if that fails.
-
-    BITMAPINFO BitmapInfo;
+    if (BitmapHandle)
+    {
+        DeleteObject(BitmapHandle);
+    }
+    
+    if (!DeviceContext)
+    {
+        DeviceContext = CreateCompatibleDC(0);
+    }
 
     BitmapInfo.bmiHeader.biSize = sizeof(BitmapInfo.bmiHeader);
     BitmapInfo.bmiHeader.biWidth = Width;
@@ -14,26 +30,23 @@ static void Win32ResizeDIBSection(int Width, int Height)
     BitmapInfo.bmiHeader.biPlanes = 1;
     BitmapInfo.bmiHeader.biBitCount = 32;
     BitmapInfo.bmiHeader.biCompression = BI_RGB;
-    BitmapInfo.bmiHeader.biSizeImage = 0;
-    BitmapInfo.bmiHeader.biXPelsPerMeter = 0;
-    BitmapInfo.bmiHeader.biYPelsPerMeter = 0;
-    BitmapInfo.bmiHeader.biClrUsed = 0;
-    BitmapInfo.bmiHeader.biClrImportant = 0;
 
-    void* BitmapMemroy;
+    
 
-    HBITMAP BitmapHandle = CreateDIBSection(DeviceContext, &BitmapInfo, DIB_RGB_COLORS, &BitmapMemroy, 0, 0);
+    BitmapHandle = CreateDIBSection(DeviceContext, &BitmapInfo, DIB_RGB_COLORS, &BitmapMemroy, 0, 0);
 }
 
 static void Win32UpdateWindow(HDC DeviceContext, int X, int Y, int Width, int Height)
 {
-    StretchDIBits(DeviceContext,
-                  X, Y, Width, Height,
-                  X, Y, Width, Height,
-                  );
+	StretchDIBits(DeviceContext,
+		X, Y, Width, Height,
+		X, Y, Width, Height,
+        BitmapMemroy,
+        &BitmapInfo,
+        0, 0);
 }
 
-LRESULT CALLBACK MainWindowCallback(HWND Window, UINT Message, WPARAM WParame, LPARAM LParam)
+LRESULT CALLBACK Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParame, LPARAM LParam)
 {
     LRESULT Result = 0;
 
@@ -65,7 +78,7 @@ LRESULT CALLBACK MainWindowCallback(HWND Window, UINT Message, WPARAM WParame, L
         int Width = Paint.rcPaint.right - Paint.rcPaint.left;
         int Height = Paint.rcPaint.bottom - Paint.rcPaint.top;
 
-        Win32UpdateWindow(Window, X, Y, Width, Height);
+        Win32UpdateWindow(DeviceContext, X, Y, Width, Height);
 
         EndPaint(Window, &Paint);
     }
@@ -94,7 +107,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
     // TODO(Princerin): Check if HDREDRAW/VREDRAW/OWNDC still matter.
     WindowClass.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
-    WindowClass.lpfnWndProc = MainWindowCallback;
+    WindowClass.lpfnWndProc = Win32MainWindowCallback;
     WindowClass.hInstance = hInstance;
     WindowClass.lpszClassName = L"HandmadeHeroWindowClass";
 
