@@ -2,6 +2,7 @@
 #include <Windows.h>
 #include <cstdint>
 #include <ctime>
+#include <Xinput.h>
 
 #define internal static
 #define local_persist static
@@ -17,28 +18,36 @@ typedef int32_t int32;
 
 global_variable bool Running = true;
 
-struct Win32WindowDimension
+struct Win32WindowInfo
 {
+    int X;
+    int Y;
     int Width;
     int Height;
 };
 
-Win32WindowDimension WindowDimension;
+Win32WindowInfo WindowInfo;
 
-Win32WindowDimension GetWindowDimension(HWND Window)
+Win32WindowInfo GetWindowInfo(HWND Window)
 {
 	RECT WindowRect;
 	GetClientRect(Window, &WindowRect);
 
-    Win32WindowDimension WindowDimension {};
+    Win32WindowInfo WindowInfo {};
+
+    if (WindowRect.left != 0 && WindowRect.top != 0)
+    {
+		WindowInfo.X = WindowRect.left;
+		WindowInfo.Y = WindowRect.top;
+    }
 
 	if (WindowRect.right != 0 && WindowRect.bottom != 0)
 	{
-        WindowDimension.Width = WindowRect.right - WindowRect.left;
-        WindowDimension.Height = WindowRect.bottom - WindowRect.top;
+        WindowInfo.Width = WindowRect.right - WindowRect.left;
+        WindowInfo.Height = WindowRect.bottom - WindowRect.top;
 	}
 
-    return WindowDimension;
+    return WindowInfo;
 }
 
 struct Win32OffScreenBuffer
@@ -97,6 +106,66 @@ void RenderNoises(int Count)
 	}
 }
 
+void RenderPureColorUInt8(uint8 Red, uint8 Green, uint8 Blue)
+{
+    uint8* Row = (uint8*)GlobalBackBuffer.Memory;
+
+    for (int Y = 0; Y < GlobalBackBuffer.Height; Y++)
+    {
+        uint8* Pixel = Row;
+
+        for (int X = 0; X < GlobalBackBuffer.Width; X++)
+        {
+            // Pixel in memory: BB GG RR XX
+            // Little Endian Architecture 
+            // 0xRRGGBBXX
+			Pixel[0] = Blue;    // BB
+			Pixel[1] = Green;   // GG
+			Pixel[2] = Red;     // RR
+			Pixel[3] = 0;       // XX
+            Pixel += 4;
+
+			//*Pixel = Red;
+			//Pixel++;
+
+			//*Pixel = Green;
+			//Pixel++;
+
+			//*Pixel = Blue;
+			//Pixel++;
+
+			//*Pixel = 0;
+   //         Pixel++;
+        }
+
+        Row += GlobalBackBuffer.Pitch;
+    }
+}
+
+void RenderPureColorUInt32(uint8 Red, uint8 Green, uint8 Blue)
+{
+	uint8* Row = (uint8*)GlobalBackBuffer.Memory;
+
+	for (int Y = 0; Y < GlobalBackBuffer.Height; Y++)
+	{
+		uint32* Pixel = (uint32*)Row;
+
+		for (int X = 0; X < GlobalBackBuffer.Width; X++)
+		{
+			// Pixel in memory: BB GG RR XX
+			// Little Endian Architecture 
+			// 0xXXRRGGBB
+            // (Value << 24)就是XX的值
+            uint32 Color = (Red << 16) + (Green << 8) + Blue;
+			*Pixel = Color;
+
+			Pixel++;
+		}
+
+		Row += GlobalBackBuffer.Pitch;
+	}
+}
+
 void CleanBitmap(uint8 Red = 255, uint8 Green = 255, uint8 Blue = 255)
 {
     uint8* Row = (uint8*)GlobalBackBuffer.Memory;
@@ -117,7 +186,7 @@ void CleanBitmap(uint8 Red = 255, uint8 Green = 255, uint8 Blue = 255)
 }
 
 // DIB stand for Device Independent Bitmap
-static void Win32ResizeDIBSection(int Width, int Height)
+internal void Win32ResizeDIBSection()
 {
     // TODO(Princerin): Bulletproof this.
     // Maybe don't free first, free after, then free first if that fails.
@@ -127,8 +196,8 @@ static void Win32ResizeDIBSection(int Width, int Height)
         VirtualFree(GlobalBackBuffer.Memory, 0, MEM_RELEASE);
     }
 
-    GlobalBackBuffer.Width = Width;
-    GlobalBackBuffer.Height = Height;
+    GlobalBackBuffer.Width = WindowInfo.Width;
+    GlobalBackBuffer.Height = WindowInfo.Height;
 
     GlobalBackBuffer.Info.bmiHeader.biSize = sizeof(GlobalBackBuffer.Info.bmiHeader);
     GlobalBackBuffer.Info.bmiHeader.biWidth = GlobalBackBuffer.Width;
@@ -143,26 +212,24 @@ static void Win32ResizeDIBSection(int Width, int Height)
     GlobalBackBuffer.Info.bmiHeader.biBitCount = 32;
     GlobalBackBuffer.Info.bmiHeader.biCompression = BI_RGB;
 
-    GlobalBackBuffer.Pitch = Width * GlobalBackBuffer.BytesPerPixel;
+    GlobalBackBuffer.Pitch = WindowInfo.Width * GlobalBackBuffer.BytesPerPixel;
 
     // NOTE(Princerin): Thank you to Chris Hecker of Spy Party fame
     // for clarifying the deal with StretchDIBits and BitBlt!
     // No more DC for us.
-    int BitmapMemorySize = (Width * Height) * GlobalBackBuffer.BytesPerPixel;
+    int BitmapMemorySize = (WindowInfo.Width * WindowInfo.Height) * GlobalBackBuffer.BytesPerPixel;
 
     // VirtualAlloc always allocate multiples of 4k(4096byte).
     GlobalBackBuffer.Memory = VirtualAlloc(nullptr, BitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
-
-    RenderWeirdGradient(&GlobalBackBuffer, 0, 0);
 }
 
-static void Win32UpdateWindow(HDC DeviceContext, int X, int Y, int WindowWidth, int WindowHeight)
+static void Win32UpdateWindow(HDC DeviceContext)
 {
     // TODO(Princerin): Aspect ratio correction.
 	StretchDIBits(DeviceContext,
 		//X, Y, Width, Height,
 		//X, Y, Width, Height,
-        0, 0, WindowWidth, WindowHeight,
+        WindowInfo.X, WindowInfo.Y, WindowInfo.Width, WindowInfo.Height,
         0, 0, GlobalBackBuffer.Width, GlobalBackBuffer.Height,
         GlobalBackBuffer.Memory,
         &GlobalBackBuffer.Info,
@@ -177,14 +244,14 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WPara
     {
     case WM_CREATE:
     {
-        WindowDimension = GetWindowDimension(Window);
-        Win32ResizeDIBSection(WindowDimension.Width, WindowDimension.Height);
+        WindowInfo = GetWindowInfo(Window);
+        Win32ResizeDIBSection();
     }
         break;
 
     case WM_SIZE:
     {
-        WindowDimension = GetWindowDimension(Window);
+        WindowInfo = GetWindowInfo(Window);
         //Win32ResizeDIBSection(WindowDimension.Width, WindowDimension.Height);
     }
         break;
@@ -209,12 +276,9 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WPara
 
         HDC DeviceContext = BeginPaint(Window, &Paint);
 
-        int X = Paint.rcPaint.left;
-        int Y = Paint.rcPaint.top;
-        int Width = Paint.rcPaint.right - Paint.rcPaint.left;
-        int Height = Paint.rcPaint.bottom - Paint.rcPaint.top;
+        WindowInfo = GetWindowInfo(Window);
 
-		Win32UpdateWindow(DeviceContext, X, Y, WindowDimension.Width, WindowDimension.Height);
+		Win32UpdateWindow(DeviceContext);
 
         EndPaint(Window, &Paint);
     }
@@ -300,6 +364,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
             double RealTime = StartTime.QuadPart * 1000.0 / Frequency.QuadPart;
             double SimulationTime = 0.0;
 
+            HDC DeviceContext = GetDC(GetActiveWindow());
+
             while (Message.message != WM_QUIT)
             {
                 // Pass NULL instead of the window - handle to PeekMessage / GetMessage.
@@ -316,35 +382,55 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
                 }
                 else
                 {
-                    QueryPerformanceCounter(&StartTime);
+					if (Running)
+					{
+                        QueryPerformanceCounter(&StartTime);
 
-                    double Now = StartTime.QuadPart * 1000.0 / Frequency.QuadPart;
+                        double Now = StartTime.QuadPart * 1000.0 / Frequency.QuadPart;
 
-                    double GameTime = Now - RealTime;
+                        double GameTime = Now - RealTime;
 
-                    while (SimulationTime < GameTime)
-                    {
-                        SimulationTime += 16;
+                        while (SimulationTime < GameTime)
+                        {
+                            SimulationTime += 16;
 
-						if (Running)
-						{
-							RenderWeirdGradient(&GlobalBackBuffer, XOffset, YOffset);
-							RenderNoises(10000);
+						    //RenderWeirdGradient(&GlobalBackBuffer, XOffset, YOffset);
+						    //RenderNoises(10000);
+                            //RenderPureColorUInt8(255, 0, 0);
+                            RenderPureColorUInt32(255, 0, 0);
+						    XOffset++;
+						    YOffset++;
+                        }
 
-							HDC DeviceContext = GetDC(WindowHandle);
+						Win32UpdateWindow(DeviceContext);
 
-							Win32UpdateWindow(DeviceContext, 0, 0, WindowDimension.Width, WindowDimension.Height);
+						CleanBitmap(100, 149, 237);
 
-							CleanBitmap(100, 149, 237);
+                        for (DWORD ControllerIndex = 0; ControllerIndex < XUSER_MAX_COUNT; ControllerIndex)
+                        {
+							XINPUT_STATE ControllerState;
+							DWORD Success = XInputGetState(ControllerIndex, &ControllerState);
+							if (Success == ERROR_SUCCESS)
+							{
+								// NOTE(Princerin): This controller is plugged in.
+								// TODO(Princerin): See if ControllerState.dwPacketNumber increments.
+								XINPUT_GAMEPAD GamePad = ControllerState.Gamepad;
 
-							XOffset++;
-							YOffset++;
-						}
+								if (GamePad.wButtons & XINPUT_GAMEPAD_A)                                                                                                      
+								{
+									OutputDebugString(L"A button pressed.\n");
+								}
+							}
+							else
+							{
+								// NOTE(Princerin): The controller is not available.
+							}
+                        }
+
+						QueryPerformanceCounter(&EndTime);
+
+                        double ElapsedTime = (EndTime.QuadPart - StartTime.QuadPart) * 1000.0 / Frequency.QuadPart;
                     }
-
-                    QueryPerformanceCounter(&EndTime);
-
-                    double ElapsedTime = (EndTime.QuadPart - StartTime.QuadPart) * 1000.0 / Frequency.QuadPart;
                 }
             }
         }
