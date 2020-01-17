@@ -18,9 +18,15 @@
     <ClCompile Include="..\code\win32_handmade.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\code\Timer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="resource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\code\Timer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <ctime>
 #include <Xinput.h>
+#include "Timer.h"
 
 #define internal static
 #define local_persist static
@@ -17,6 +18,31 @@ typedef int16_t int16;
 typedef int32_t int32;
 
 global_variable bool Running = true;
+global_variable int XOffset;
+global_variable int YOffset;
+global_variable Timer InputTimer;
+
+#define X_INPUT_GET_STATE(name) DWORD WINAPI name(DWORD dwUserIndex, XINPUT_STATE* pState)
+#define X_INPUT_SET_STATE(name) DWORD WINAPI name(DWORD dwUserIndex, XINPUT_VIBRATION* pVibration)
+
+typedef X_INPUT_GET_STATE(FPXInputGetState);
+typedef X_INPUT_SET_STATE(FPXInputSetState);
+
+X_INPUT_GET_STATE(XInputGetStateStub)
+{
+    return 0;
+}
+
+X_INPUT_SET_STATE(XInputSetStateStub)
+{
+    return 0;
+}
+
+global_variable FPXInputGetState* XInputGetStateDLL = XInputGetStateStub;
+global_variable FPXInputSetState* XInputSetStateDLL = XInputSetStateStub;
+
+#define XInputGetState XInputGetStateDLL
+#define XInputSetState XInputSetStateDLL
 
 struct Win32WindowInfo
 {
@@ -236,6 +262,17 @@ static void Win32UpdateWindow(HDC DeviceContext)
         DIB_RGB_COLORS, SRCCOPY);
 }
 
+internal void Win32LoadXInput()
+{
+   HMODULE XInputLibrary = LoadLibrary(XINPUT_DLL_W);
+
+   if (XInputLibrary)
+   {
+       XInputGetState = (FPXInputGetState*)GetProcAddress(XInputLibrary, "XInputGetState");
+       XInputSetState = (FPXInputSetState*)GetProcAddress(XInputLibrary, "XInputSetState");
+   }
+}
+
 LRESULT CALLBACK Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
 {
     LRESULT Result = 0;
@@ -285,15 +322,47 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WPara
 
         break;
 
+    case WM_KEYUP:
     case WM_KEYDOWN:
+    {
+        bool WasDown = ((LParam & (1 << 30)) != 0);
+        bool IsDown = ((LParam & (1 << 31)) != 0);
+
         switch (WParam)
         {
         case VK_ESCAPE:
             DestroyWindow(Window);
             break;
+
+        case 'W':
+        case VK_UP:
+        {
+
+            YOffset++;
+        }
+
+        break;
+
+        case 'S':
+        case VK_DOWN:
+            YOffset--;
+            break;
+
+        case 'A':
+        case VK_LEFT:
+            XOffset++;
+            break;
+
+        case 'D':
+        case VK_RIGHT:
+            XOffset--;
+            break;
+
         default:
             break;
         }
+    }
+
         break;
 
     case WM_CLOSE:
@@ -310,6 +379,73 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WPara
     }
 
     return Result;
+}
+
+void ProccessInput()
+{
+	for (DWORD ControllerIndex = 0; ControllerIndex < XUSER_MAX_COUNT; ControllerIndex++)
+	{
+		XINPUT_STATE ControllerState;
+		DWORD Success = XInputGetState(ControllerIndex, &ControllerState);
+		if (Success == ERROR_SUCCESS)
+		{
+			// NOTE(Princerin): This controller is plugged in.
+			// TODO(Princerin): See if ControllerState.dwPacketNumber increments.
+			XINPUT_GAMEPAD GamePad = ControllerState.Gamepad;
+
+            bool AButton = GamePad.wButtons & XINPUT_GAMEPAD_A;
+
+			if (AButton)
+			{
+                InputTimer.Stop();
+
+                double ElapsedTime = InputTimer.GetElapsedTime();
+
+                if (ElapsedTime > 100.0)
+                {
+                    OutputDebugString(L"A button pressed.\n");
+                }
+
+                InputTimer.Start();
+			}
+
+            bool Up = GamePad.wButtons & XINPUT_GAMEPAD_DPAD_UP;
+            bool Down = GamePad.wButtons & XINPUT_GAMEPAD_DPAD_DOWN;
+            bool Left = GamePad.wButtons & XINPUT_GAMEPAD_DPAD_LEFT;
+            bool Right = GamePad.wButtons & XINPUT_GAMEPAD_DPAD_RIGHT;
+            int ThumbLeftX = GamePad.sThumbLX;
+            int ThumbLeftY = GamePad.sThumbLY;
+
+            if (Left || ThumbLeftX < -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
+            {
+                XOffset++;
+            }
+
+            if (Right || ThumbLeftX > XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
+            {
+                XOffset--;
+            }
+
+            if (Up || ThumbLeftY > XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
+            {
+                YOffset++;
+            }
+
+            if (Down || ThumbLeftY < -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
+            {
+                YOffset--;
+            }
+
+            XINPUT_VIBRATION Vibration;
+            Vibration.wLeftMotorSpeed = 10000;
+            Vibration.wRightMotorSpeed = 10000;
+            XInputSetState(0, &Vibration);
+		}
+		else
+		{
+			// NOTE(Princerin): The controller is not available.
+		}
+	}
 }
 
 void Render()
@@ -349,22 +485,17 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
         {
             MSG Message {};
 
-			int XOffset = 0;
-			int YOffset = 0;
-
             srand(time(nullptr));
 
-            LARGE_INTEGER Frequency;
-            LARGE_INTEGER StartTime;
-            LARGE_INTEGER EndTime;
+            Timer GameTimer;
+            GameTimer.Start();
 
-            QueryPerformanceFrequency(&Frequency);
-            QueryPerformanceCounter(&StartTime);
-
-            double RealTime = StartTime.QuadPart * 1000.0 / Frequency.QuadPart;
+            double RealTime = GameTimer.Now();
             double SimulationTime = 0.0;
 
             HDC DeviceContext = GetDC(GetActiveWindow());
+
+            Win32LoadXInput();
 
             while (Message.message != WM_QUIT)
             {
@@ -384,9 +515,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
                 {
 					if (Running)
 					{
-                        QueryPerformanceCounter(&StartTime);
-
-                        double Now = StartTime.QuadPart * 1000.0 / Frequency.QuadPart;
+                        double Now = GameTimer.Now();
 
                         double GameTime = Now - RealTime;
 
@@ -394,42 +523,21 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
                         {
                             SimulationTime += 16;
 
-						    //RenderWeirdGradient(&GlobalBackBuffer, XOffset, YOffset);
+						    RenderWeirdGradient(&GlobalBackBuffer, XOffset, YOffset);
 						    //RenderNoises(10000);
                             //RenderPureColorUInt8(255, 0, 0);
-                            RenderPureColorUInt32(255, 0, 0);
-						    XOffset++;
-						    YOffset++;
+                            //RenderPureColorUInt32(255, 0, 0);
+
+                            ProccessInput();
                         }
 
 						Win32UpdateWindow(DeviceContext);
 
-						CleanBitmap(100, 149, 237);
+						//CleanBitmap(100, 149, 237);
 
-                        for (DWORD ControllerIndex = 0; ControllerIndex < XUSER_MAX_COUNT; ControllerIndex)
-                        {
-							XINPUT_STATE ControllerState;
-							DWORD Success = XInputGetState(ControllerIndex, &ControllerState);
-							if (Success == ERROR_SUCCESS)
-							{
-								// NOTE(Princerin): This controller is plugged in.
-								// TODO(Princerin): See if ControllerState.dwPacketNumber increments.
-								XINPUT_GAMEPAD GamePad = ControllerState.Gamepad;
+                        GameTimer.Update();
 
-								if (GamePad.wButtons & XINPUT_GAMEPAD_A)                                                                                                      
-								{
-									OutputDebugString(L"A button pressed.\n");
-								}
-							}
-							else
-							{
-								// NOTE(Princerin): The controller is not available.
-							}
-                        }
-
-						QueryPerformanceCounter(&EndTime);
-
-                        double ElapsedTime = (EndTime.QuadPart - StartTime.QuadPart) * 1000.0 / Frequency.QuadPart;
+                        double ElapsedTime = GameTimer.GetElapsedTime();
                     }
                 }
             }

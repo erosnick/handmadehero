@@ -141,9 +141,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\code\Timer.cpp" />
     <ClCompile Include="..\code\win32_handmade.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\code\Timer.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
