@@ -6,6 +6,7 @@
 #include <xaudio2.h>
 #include <dsound.h>
 #include <cmath>
+#include <cstdio>
 #include "Timer.h"
 
 #define internal static
@@ -15,10 +16,12 @@
 typedef uint8_t uint8;
 typedef uint16_t uint16;
 typedef uint32_t uint32;
+typedef uint64_t uint64;
 
 typedef int8_t int8;
 typedef int16_t int16;
 typedef int32_t int32;
+typedef int64_t int64;
 
 typedef float real32;
 typedef double real64;
@@ -91,12 +94,14 @@ Win32WindowInfo GetWindowInfo(HWND Window)
 struct Win32SoundOutput
 {
 	int16 ToneVolume = 16000;
-	int Hertz = 256;
+	int ToneHertz = 256;
 	int SamplesPerSecond = 48000;
-	int WavePeriod = SamplesPerSecond / Hertz;
+	int WavePeriod = SamplesPerSecond / ToneHertz;
 	int BytesPerSample = sizeof(int16) * 2; // 16-bit stereo format, this gives you 2 channels * 2 byte = 4 bytes.
 	uint32 RunningSampleIndex = 0;
 	int32 SecondaryBufferSize = SamplesPerSecond * BytesPerSample;
+    real32 tSine;
+    int LatencySampleCount = SamplesPerSecond / 60;
 };
 
 global_variable Win32SoundOutput SoundOutput;
@@ -375,13 +380,13 @@ internal void Win32FillSoundBuffer(Win32SoundOutput& SoundOutput, DWORD BytesToL
 		for (DWORD SampleIndex = 0; SampleIndex < Region1SampleCount; SampleIndex++)
 		{
 			// TODO(Princerin): Draw this out for people
-			real32 t = 2.0f * PI * (real32)SoundOutput.RunningSampleIndex / SoundOutput.WavePeriod;
-			real32 SineValue = sinf(t);
+			real32 SineValue = sinf(SoundOutput.tSine);
 			int16 SampleValue = (int16)(SineValue * SoundOutput.ToneVolume);
 
 			*SampleOut++ = SampleValue;
 			*SampleOut++ = SampleValue;
 
+            SoundOutput.tSine += 2.0f * PI * 1.0f / SoundOutput.WavePeriod;
 			SoundOutput.RunningSampleIndex++;
 		}
 
@@ -390,13 +395,13 @@ internal void Win32FillSoundBuffer(Win32SoundOutput& SoundOutput, DWORD BytesToL
 
 		for (DWORD SampleIndex = 0; SampleIndex < Region2SampleCount; SampleIndex++)
 		{
-			real32 t = 2.0f * PI * (real32)SoundOutput.RunningSampleIndex / SoundOutput.WavePeriod;
-			real32 SineValue = sinf(t);
+			real32 SineValue = sinf(SoundOutput.tSine);
 			int16 SampleValue = (int16)(SineValue * SoundOutput.ToneVolume);
 
 			*SampleOut++ = SampleValue;
 			*SampleOut++ = SampleValue;
 
+            SoundOutput.tSine += 2.0f * PI * 1.0f / SoundOutput.WavePeriod;
 			SoundOutput.RunningSampleIndex++;
 		}
 
@@ -576,11 +581,16 @@ void ProccessInput()
 			bool Left = GamePad.wButtons & XINPUT_GAMEPAD_DPAD_LEFT;
 			bool Right = GamePad.wButtons & XINPUT_GAMEPAD_DPAD_RIGHT;
 
+            // XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE  7849
+            // XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE 8689
 			int16 ThumbLeftX = GamePad.sThumbLX;
             int16 ThumbLeftY = GamePad.sThumbLY;
 
             XOffset += -(ThumbLeftX >> 12);
             YOffset += ThumbLeftY >> 12;
+
+			//SoundOutput.ToneHertz = 512 + (int)(256.0f * ((real32)ThumbLeftY / 30000.0f));
+			//SoundOutput.WavePeriod = SoundOutput.SamplesPerSecond / SoundOutput.ToneHertz;
 
             uint8 LeftTrigger = GamePad.bLeftTrigger;
             uint8 RightTrigger = GamePad.bRightTrigger;
@@ -736,29 +746,40 @@ void PlaySound()
 	{
 		DWORD BytesToLock = (SoundOutput.RunningSampleIndex * SoundOutput.BytesPerSample) % SoundOutput.SecondaryBufferSize;
 
+        DWORD TargetCursor = (PlayCursor + SoundOutput.LatencySampleCount * SoundOutput.BytesPerSample) % SoundOutput.SecondaryBufferSize;
+
 		// NOTE(Princerin): Startup situation
-		if (BytesToLock == PlayCursor)
+		if (BytesToLock == TargetCursor)
 		{
 			BytesToWrite = 0;
 		}
 		// NOTE(Princerin): Case 1
-		else if (BytesToLock > PlayCursor)
+		else if (BytesToLock > TargetCursor)
 		{
 			BytesToWrite = SoundOutput.SecondaryBufferSize - BytesToLock;
-			BytesToWrite += PlayCursor;
+			BytesToWrite += TargetCursor;
 		}
 		// NOTE(Princerin): Case 2
 		else
 		{
-			BytesToWrite = PlayCursor - BytesToLock;
+			BytesToWrite = TargetCursor - BytesToLock;
 		}
 
-        Win32FillSoundBuffer(SoundOutput, BytesToLock, BytesToWrite);
+        Win32FillSoundBuffer(SoundOutput, BytesToLock, SoundOutput.LatencySampleCount * SoundOutput.BytesPerSample);
 
 		GlobalSecondaryBuffer->Play(0, 0, DSBPLAY_LOOPING);
 
         SoundIsPlaying = true;
 	}
+}
+
+void PrintFPS(HDC DeviceContext, double FramePerSecond)
+{
+    wchar_t buffer[11]{ L"" };
+
+    swprintf_s(buffer, L"%f", FramePerSecond);
+    RECT TextRect{ 0, 0, 100, 20 };
+    DrawText(DeviceContext, buffer, lstrlen(buffer), &TextRect, DT_SINGLELINE);
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow)
@@ -798,11 +819,15 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
             Timer GameTimer;
             GameTimer.Start();
 
-            double RealTime = GameTimer.Now();
-            double SimulationTime = 0.0;
+            real64 RealTime = GameTimer.Now();
+            real64 SimulationTime = 0.0;
 
             Win32LoadXInput();
             Win32InitDirectSound(WindowHandle, 48000, 48000 * sizeof(int16) * 2);
+
+            DWORD FrameCount = 0;
+
+            int64 LastCycleCount = __rdtsc();
 
             while (Message.message != WM_QUIT && Running)
             {
@@ -822,9 +847,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
                 {
 					if (Activate)
 					{
-                        double Now = GameTimer.Now();
+                        real64 Now = GameTimer.Now();
 
-                        double GameTime = Now - RealTime;
+                        real64 GameTime = Now - RealTime;
 
                         while (SimulationTime < GameTime)
                         {
@@ -837,20 +862,43 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
                             ProccessInput();
 
-                            PlaySound();
+                            //PlaySound();
                         }
 
                         HDC DeviceContext = GetDC(GetActiveWindow());
 
 						Win32UpdateWindow(DeviceContext);
 
-                        ReleaseDC(WindowHandle, DeviceContext);
-
 						//CleanBitmap(100, 149, 237);
 
                         GameTimer.Update();
 
-                        double ElapsedTime = GameTimer.GetElapsedTime();
+						FrameCount++;
+
+                        int64 EndCycleCount = __rdtsc();
+
+                        int64 CyclesElapsed = EndCycleCount - LastCycleCount;
+
+                        real64 ElapsedTime = GameTimer.GetElapsedTime();
+
+                        real64 FrameTime = ElapsedTime / FrameCount;
+                        real64 FramePerSecond = 1000 / FrameTime;
+
+                        real64 MegaCyclePerFrame = (CyclesElapsed / (1000.0f * 1000.0f));
+
+						wchar_t buffer[256]{ L"" };
+
+						swprintf_s(buffer, L"%.02fms/f, %df/s, %.02fmc/f", FrameTime, (int32)FramePerSecond, MegaCyclePerFrame);
+
+                        SetTextColor(DeviceContext, RGB(255, 255, 255));
+                        SetBkMode(DeviceContext, TRANSPARENT);
+
+						RECT TextRect{ 0, 0, 256, 20 };
+						DrawText(DeviceContext, buffer, lstrlen(buffer), &TextRect, DT_SINGLELINE);
+
+						ReleaseDC(WindowHandle, DeviceContext);
+
+                        LastCycleCount = EndCycleCount;
                     }
                 }
             }
