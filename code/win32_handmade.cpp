@@ -429,7 +429,20 @@ internal void Win32FillSoundBuffer(Win32SoundOutput& SoundOutput, DWORD BytesToL
 		}
 
 		HRESULT HResult = GlobalSecondaryBuffer->Unlock(Region1, Region1Size, Region2, Region2Size);
+
+        if (SUCCEEDED(HResult))
+        {
+
+        }
+        else
+        {
+            OutputDebugString(L"Lock sound buffer failed.");
+        }
 	}
+    else
+    {
+        OutputDebugString(L"Unlock sound buffer failed.");
+    }
 }
 
 internal HRESULT Win32InitXAudio()
@@ -884,9 +897,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
                             //RenderPureColorUInt32(255, 0, 0);
 
                             ProccessInput();
-                        }
 
-                        Win32PreFillSoundBuffer();
+                            Win32PreFillSoundBuffer();
+                        }
 
                         HDC DeviceContext = GetDC(GetActiveWindow());
 
@@ -911,7 +924,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
 						wchar_t buffer[256]{ L"" };
 
-						swprintf_s(buffer, L"%.02fms/f, %df/s, %.02fmc/f, %f", FrameTime, (int32)FramePerSecond, MegaCyclePerFrame, SoundOutput.tSine);
+						swprintf_s(buffer, L"%.02fms/f, %df/s, %.02fmc/f, %d", FrameTime, (int32)FramePerSecond, MegaCyclePerFrame, SoundOutput.LatencySampleCount);
 
                         SetTextColor(DeviceContext, RGB(255, 255, 255));
                         SetBkMode(DeviceContext, TRANSPARENT);
