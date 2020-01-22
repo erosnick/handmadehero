@@ -1,3 +1,24 @@
+/*
+TODO(Princerin): THIS IS NOT A FINAL PLATFORM LAYER!!!
+
+- Saved game locations
+- Getting a handle to our own executable file
+- Asset loading path
+- Threading (launch a thread)
+- Raw Input (support for multiple keyboards
+- Sleep/timeBeginPeriod
+- ClipCursor() (for multimonitor support)
+- Fullscreen support
+- WM_SETCURSOR (Control cursor visibility)
+- QueryCancelAutoplay
+- WM_ACTIVATEAPP (for when we are not the active application)
+- Blit speed improvements (Bitblt)
+- Hardware acceleration (OpenGL or Direct3D or BOTH??)
+- GetKeyboardLayout (for French keyboards, international WASD support)
+
+Just a partial list of stuff!!
+*/
+
 #include "../project/resource.h"
 #include <Windows.h>
 #include <cstdint>
