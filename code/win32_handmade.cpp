@@ -49,6 +49,8 @@ typedef double real64;
 
 const float PI = 3.14159265359f;
 
+#include "handmade.cpp"
+
 global_variable bool Running = true;
 global_variable bool Activate = true;
 global_variable int XOffset;
@@ -114,7 +116,7 @@ Win32WindowInfo GetWindowInfo(HWND Window)
 
 struct Win32SoundOutput
 {
-	int16 ToneVolume = 16000;
+	int16 ToneVolume = 3000;
 	int ToneHertz = 256;
 	int SamplesPerSecond = 48000;
 	int WavePeriod = SamplesPerSecond / ToneHertz;
@@ -122,7 +124,7 @@ struct Win32SoundOutput
 	uint32 RunningSampleIndex = 0;
 	int32 SecondaryBufferSize = SamplesPerSecond * BytesPerSample;
     real32 tSine;
-    int LatencySampleCount = SamplesPerSecond / 60;
+    int LatencySampleCount = SamplesPerSecond / 15;
 };
 
 global_variable Win32SoundOutput SoundOutput;
@@ -139,31 +141,31 @@ struct Win32OffScreenBuffer
 
 Win32OffScreenBuffer GlobalBackBuffer;
 
-internal void RenderWeirdGradient()
-{
-    uint8* Row = (uint8*)GlobalBackBuffer.Memory;
-
-    for (int Y = 0; Y < GlobalBackBuffer.Height; Y++)
-    {
-        uint32* Pixel = (uint32*)Row;
-
-        for (int X = 0; X < GlobalBackBuffer.Width; X++)
-        {
-            // Pixel in memory: BB GG RR XX
-            // Little Endian Architecture 
-            // 0xRRGGBBXX
-            //*Pixel = (255 << 16) + (255 << 8) + 255;
-            //*Pixel = ((uint8)X << 16) + ((uint8)Y << 8);
-            *Pixel = ((uint8)(X + XOffset) << 8) | ((uint8)(Y + YOffset));
-            //*Pixel = (255 << 16);   // 255 0 0 0
-            //*Pixel = 255;   // 0 0 255 0
-
-            Pixel++;
-        }
-
-        Row += GlobalBackBuffer.Pitch;
-    }
-}
+//internal void RenderWeirdGradient()
+//{
+//    uint8* Row = (uint8*)GlobalBackBuffer.Memory;
+//
+//    for (int Y = 0; Y < GlobalBackBuffer.Height; Y++)
+//    {
+//        uint32* Pixel = (uint32*)Row;
+//
+//        for (int X = 0; X < GlobalBackBuffer.Width; X++)
+//        {
+//            // Pixel in memory: BB GG RR XX
+//            // Little Endian Architecture 
+//            // 0xRRGGBBXX
+//            //*Pixel = (255 << 16) + (255 << 8) + 255;
+//            //*Pixel = ((uint8)X << 16) + ((uint8)Y << 8);
+//            *Pixel = ((uint8)(X + XOffset) << 8) | ((uint8)(Y + YOffset));
+//            //*Pixel = (255 << 16);   // 255 0 0 0
+//            //*Pixel = 255;   // 0 0 255 0
+//
+//            Pixel++;
+//        }
+//
+//        Row += GlobalBackBuffer.Pitch;
+//    }
+//}
 
 internal void PilotPixel(int X, int Y, int Color)
 {
@@ -407,7 +409,7 @@ internal void Win32FillSoundBuffer(Win32SoundOutput& SoundOutput, DWORD BytesToL
 			*SampleOut++ = SampleValue;
 			*SampleOut++ = SampleValue;
 
-            SoundOutput.tSine += 2.0f * PI * 1.0f / SoundOutput.WavePeriod;
+            SoundOutput.tSine += 2.0f * PI * 1.0f / (real32)SoundOutput.WavePeriod;
 			SoundOutput.RunningSampleIndex++;
 		}
 
@@ -422,7 +424,7 @@ internal void Win32FillSoundBuffer(Win32SoundOutput& SoundOutput, DWORD BytesToL
 			*SampleOut++ = SampleValue;
 			*SampleOut++ = SampleValue;
 
-            SoundOutput.tSine += 2.0f * PI * 1.0f / SoundOutput.WavePeriod;
+            SoundOutput.tSine += 2.0f * PI * 1.0f / (real32)SoundOutput.WavePeriod;
 			SoundOutput.RunningSampleIndex++;
 		}
 
@@ -610,8 +612,8 @@ void ProccessInput()
             XOffset += -(ThumbLeftX >> 12);
             YOffset += ThumbLeftY >> 12;
 
-			//SoundOutput.ToneHertz = 512 + (int)(256.0f * ((real32)ThumbLeftY / 30000.0f));
-			//SoundOutput.WavePeriod = SoundOutput.SamplesPerSecond / SoundOutput.ToneHertz;
+			SoundOutput.ToneHertz = 512 + (int)(256.0f * ((real32)ThumbLeftY / 30000.0f));
+			SoundOutput.WavePeriod = SoundOutput.SamplesPerSecond / SoundOutput.ToneHertz;
 
             uint8 LeftTrigger = GamePad.bLeftTrigger;
             uint8 RightTrigger = GamePad.bRightTrigger;
@@ -658,7 +660,7 @@ void ProccessInput()
             XINPUT_VIBRATION Vibration;
             Vibration.wLeftMotorSpeed = 10000;
             Vibration.wRightMotorSpeed = 10000;
-            XInputSetState(0, &Vibration);
+            //XInputSetState(0, &Vibration);
 		}
 		else
 		{
@@ -752,12 +754,9 @@ void Render()
 //}
 
 // NOTE(Princerin): Sin wave
-void PlaySound()
+void Win32PreFillSoundBuffer()
 { 
 	// NOTE(Princerin): DirectSound output test.
-	DWORD WritePointer = 0;
-	DWORD BytesToWrite = 0;
-
 	DWORD PlayCursor = 0;
 	DWORD WriteCursor = 0;
 
@@ -769,13 +768,9 @@ void PlaySound()
 
         DWORD TargetCursor = (PlayCursor + SoundOutput.LatencySampleCount * SoundOutput.BytesPerSample) % SoundOutput.SecondaryBufferSize;
 
-		// NOTE(Princerin): Startup situation
-		if (BytesToLock == TargetCursor)
-		{
-			BytesToWrite = 0;
-		}
+        DWORD BytesToWrite = 0;
 		// NOTE(Princerin): Case 1
-		else if (BytesToLock > TargetCursor)
+	    if (BytesToLock > TargetCursor)
 		{
 			BytesToWrite = SoundOutput.SecondaryBufferSize - BytesToLock;
 			BytesToWrite += TargetCursor;
@@ -786,9 +781,7 @@ void PlaySound()
 			BytesToWrite = TargetCursor - BytesToLock;
 		}
 
-        Win32FillSoundBuffer(SoundOutput, BytesToLock, SoundOutput.LatencySampleCount * SoundOutput.BytesPerSample);
-
-		GlobalSecondaryBuffer->Play(0, 0, DSBPLAY_LOOPING);
+        Win32FillSoundBuffer(SoundOutput, BytesToLock, BytesToWrite);
 
         SoundIsPlaying = true;
 	}
@@ -844,11 +837,19 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
             real64 SimulationTime = 0.0;
 
             Win32LoadXInput();
-            Win32InitDirectSound(WindowHandle, 48000, 48000 * sizeof(int16) * 2);
+            Win32InitDirectSound(WindowHandle, SoundOutput.SamplesPerSecond, SoundOutput.SecondaryBufferSize);
+            Win32FillSoundBuffer(SoundOutput, 0, SoundOutput.LatencySampleCount * SoundOutput.BytesPerSample);
+            GlobalSecondaryBuffer->Play(0, 0, DSBPLAY_LOOPING);
 
             DWORD FrameCount = 0;
 
             int64 LastCycleCount = __rdtsc();
+
+            GameOffScreenBuffer Buffer;
+            Buffer.Memory = GlobalBackBuffer.Memory;
+            Buffer.Width = GlobalBackBuffer.Width;
+            Buffer.Height = GlobalBackBuffer.Height;
+            Buffer.Pitch = GlobalBackBuffer.Pitch;
 
             while (Message.message != WM_QUIT && Running)
             {
@@ -876,15 +877,16 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
                         {
                             SimulationTime += 16;
 
-						    RenderWeirdGradient();
+						    //RenderWeirdGradient();
+                            GameUpdateAndRender(Buffer, XOffset, YOffset);
 						    //RenderNoises(10000);
                             //RenderPureColorUInt8(255, 0, 0);
                             //RenderPureColorUInt32(255, 0, 0);
 
                             ProccessInput();
-
-                            //PlaySound();
                         }
+
+                        Win32PreFillSoundBuffer();
 
                         HDC DeviceContext = GetDC(GetActiveWindow());
 
@@ -909,12 +911,12 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
 						wchar_t buffer[256]{ L"" };
 
-						swprintf_s(buffer, L"%.02fms/f, %df/s, %.02fmc/f", FrameTime, (int32)FramePerSecond, MegaCyclePerFrame);
+						swprintf_s(buffer, L"%.02fms/f, %df/s, %.02fmc/f, %f", FrameTime, (int32)FramePerSecond, MegaCyclePerFrame, SoundOutput.tSine);
 
                         SetTextColor(DeviceContext, RGB(255, 255, 255));
                         SetBkMode(DeviceContext, TRANSPARENT);
 
-						RECT TextRect{ 0, 0, 256, 20 };
+						RECT TextRect{ 0, 0, 300, 20 };
 						DrawText(DeviceContext, buffer, lstrlen(buffer), &TextRect, DT_SINGLELINE);
 
 						ReleaseDC(WindowHandle, DeviceContext);
