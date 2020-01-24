@@ -123,7 +123,7 @@ struct Win32SoundOutput
 	int BytesPerSample = sizeof(int16) * 2; // 16-bit stereo format, this gives you 2 channels * 2 byte = 4 bytes.
 	uint32 RunningSampleIndex = 0;
 	int32 SecondaryBufferSize = SamplesPerSecond * BytesPerSample;
-    real32 tSine;
+    real32 tSine = 0.0f;
     int LatencySampleCount = SamplesPerSecond / 15;
 };
 
@@ -402,8 +402,7 @@ internal void Win32FillSoundBuffer(Win32SoundOutput& SoundOutput, DWORD BytesToL
 		for (DWORD SampleIndex = 0; SampleIndex < Region1SampleCount; SampleIndex++)
 		{
 			// TODO(Princerin): Draw this out for people
-            real32 t = 2.0f * PI * (real32)SoundOutput.RunningSampleIndex / (real32)SoundOutput.WavePeriod;
-			real32 SineValue = sinf(t);
+			real32 SineValue = sinf(SoundOutput.tSine);
 			int16 SampleValue = (int16)(SineValue * SoundOutput.ToneVolume);
 
 			*SampleOut++ = SampleValue;
@@ -418,8 +417,7 @@ internal void Win32FillSoundBuffer(Win32SoundOutput& SoundOutput, DWORD BytesToL
 
 		for (DWORD SampleIndex = 0; SampleIndex < Region2SampleCount; SampleIndex++)
 		{
-            real32 t = 2.0f * PI * (real32)SoundOutput.RunningSampleIndex / (real32)SoundOutput.WavePeriod;
-			real32 SineValue = sinf(t);
+			real32 SineValue = sinf(SoundOutput.tSine);
 			int16 SampleValue = (int16)(SineValue * SoundOutput.ToneVolume);
 
 			*SampleOut++ = SampleValue;
@@ -462,20 +460,16 @@ void Win32PreFillSoundBuffer(Win32SoundOutput& SoundOutput)
 		DWORD TargetCursor = (PlayCursor + SoundOutput.LatencySampleCount * SoundOutput.BytesPerSample) % SoundOutput.SecondaryBufferSize;
 
 		DWORD BytesToWrite = 0;
-		if (BytesToLock == PlayCursor)
-		{
-			BytesToWrite = 0;
-		}
 		// NOTE(Princerin): Case 1
-		else if (BytesToLock > PlayCursor)
+		if (BytesToLock > TargetCursor)
 		{
 			BytesToWrite = SoundOutput.SecondaryBufferSize - BytesToLock;
-			BytesToWrite += PlayCursor;
+			BytesToWrite += TargetCursor;
 		}
 		// NOTE(Princerin): Case 2
 		else
 		{
-			BytesToWrite = PlayCursor - BytesToLock;
+			BytesToWrite = TargetCursor - BytesToLock;
 		}
 
 		Win32FillSoundBuffer(SoundOutput, BytesToLock, BytesToWrite);
@@ -628,7 +622,7 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WPara
     return Result;
 }
 
-void ProccessInput()
+void ProccessInput(Win32SoundOutput& SoundOutput)
 {
 	for (DWORD ControllerIndex = 0; ControllerIndex < XUSER_MAX_COUNT; ControllerIndex++)
 	{
@@ -664,8 +658,8 @@ void ProccessInput()
             XOffset += -(ThumbLeftX >> 12);
             YOffset += ThumbLeftY >> 12;
 
-			//SoundOutput.ToneHertz = 512 + (int)(256.0f * ((real32)ThumbLeftY / 30000.0f));
-			//SoundOutput.WavePeriod = SoundOutput.SamplesPerSecond / SoundOutput.ToneHertz;
+			SoundOutput.ToneHertz = 512 + (int)(256.0f * ((real32)ThumbLeftY / 30000.0f));
+			SoundOutput.WavePeriod = SoundOutput.SamplesPerSecond / SoundOutput.ToneHertz;
 
             uint8 LeftTrigger = GamePad.bLeftTrigger;
             uint8 RightTrigger = GamePad.bRightTrigger;
@@ -855,12 +849,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
             real64 RealTime = GameTimer.Now();
             real64 SimulationTime = 0.0;
 
-            Win32SoundOutput SoundOutput;
+            Win32SoundOutput SoundOutput {};
 
             Win32LoadXInput();
             Win32InitDirectSound(WindowHandle, SoundOutput.SamplesPerSecond, SoundOutput.SecondaryBufferSize);
-            //Win32FillSoundBuffer(SoundOutput, 0, SoundOutput.LatencySampleCount * SoundOutput.BytesPerSample);
-            Win32FillSoundBuffer(SoundOutput, 0, SoundOutput.SecondaryBufferSize);
+            Win32FillSoundBuffer(SoundOutput, 0, SoundOutput.LatencySampleCount * SoundOutput.BytesPerSample);
             GlobalSecondaryBuffer->Play(0, 0, DSBPLAY_LOOPING);
 
             DWORD FrameCount = 0;
@@ -872,6 +865,14 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
             Buffer.Width = GlobalBackBuffer.Width;
             Buffer.Height = GlobalBackBuffer.Height;
             Buffer.Pitch = GlobalBackBuffer.Pitch;
+
+            GameSoundOutputBuffer SoundBuffer {};
+
+            int16 Samples[48000 / 30 * 2];
+
+            SoundBuffer.SamplesPerSecond = SoundOutput.SamplesPerSecond;
+            SoundBuffer.SampleCount = SoundBuffer.SamplesPerSecond / 30;
+            SoundBuffer.Samples = Samples;
 
             while (Message.message != WM_QUIT && Running)
             {
@@ -900,12 +901,12 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
                             SimulationTime += 16;
 
 						    //RenderWeirdGradient();
-                            GameUpdateAndRender(Buffer, XOffset, YOffset);
+                            GameUpdateAndRender(Buffer, XOffset, YOffset, SoundBuffer);
 						    //RenderNoises(10000);
                             //RenderPureColorUInt8(255, 0, 0);
                             //RenderPureColorUInt32(255, 0, 0);
 
-                            ProccessInput();
+                            ProccessInput(SoundOutput);
 
                             Win32PreFillSoundBuffer(SoundOutput);
                         }
