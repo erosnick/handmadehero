@@ -4,7 +4,7 @@ internal void GameOutputSound(const GameSoundOutputBuffer& SoundBuffer)
 {
     local_persist real32 tSine;
     int16 ToneVolume = 3000;
-    int32 ToneHerz = 256;
+    int32 ToneHerz = 240;
     int32 WavePeriod = SoundBuffer.SamplesPerSecond / ToneHerz;
 
     int16* SampleOut = SoundBuffer.Samples;

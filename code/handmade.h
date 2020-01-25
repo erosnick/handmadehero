@@ -24,6 +24,6 @@ struct GameSoundOutputBuffer
 	int32 SampleCount;
 };
 
-void GameOutputSound(GameSoundOutputBuffer& SoundBuffer, int SampleCountToOutput);
+void GameOutputSound(const GameSoundOutputBuffer& SoundBuffer);
 
 void GameUpdateAndRender(GameOffScreenBuffer& Buffer, int GreenOffset, int BlueOffset, const GameSoundOutputBuffer& SoundBuffer);
