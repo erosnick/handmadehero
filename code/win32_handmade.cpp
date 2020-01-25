@@ -117,7 +117,7 @@ Win32WindowInfo GetWindowInfo(HWND Window)
 struct Win32SoundOutput
 {
 	int16 ToneVolume = 3000;
-	int ToneHertz = 256;
+	int ToneHertz = 240;
 	int SamplesPerSecond = 48000;
 	int WavePeriod = SamplesPerSecond / ToneHertz;
 	int BytesPerSample = sizeof(int16) * 2; // 16-bit stereo format, this gives you 2 channels * 2 byte = 4 bytes.
@@ -658,7 +658,20 @@ void ProccessInput(Win32SoundOutput& SoundOutput)
             XOffset += -(ThumbLeftX >> 12);
             YOffset += ThumbLeftY >> 12;
 
-			SoundOutput.ToneHertz = 512 + (int)(256.0f * ((real32)ThumbLeftY / 30000.0f));
+            if (ThumbLeftY >= XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
+            {
+                ThumbLeftY -= XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE;
+            }
+            else if (ThumbLeftY <= -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
+            {
+                ThumbLeftY += XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE;
+            }
+            else
+            {
+                ThumbLeftY = 0;
+            }
+
+			SoundOutput.ToneHertz = 480 + (int)(240.0f * ((real32)ThumbLeftY / 30000.0f));
 			SoundOutput.WavePeriod = SoundOutput.SamplesPerSecond / SoundOutput.ToneHertz;
 
             uint8 LeftTrigger = GamePad.bLeftTrigger;
