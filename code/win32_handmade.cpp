@@ -49,6 +49,7 @@ typedef double real64;
 
 const float PI = 3.14159265359f;
 
+#include "win32_handmade.h"
 #include "handmade.cpp"
 
 global_variable bool Running = true;
@@ -84,14 +85,6 @@ global_variable FPXInputSetState* XInputSetStateDLL = XInputSetStateStub;
 #define XInputGetState XInputGetStateDLL
 #define XInputSetState XInputSetStateDLL
 
-struct Win32WindowInfo
-{
-    int X;
-    int Y;
-    int Width;
-    int Height;
-};
-
 Win32WindowInfo WindowInfo {};
 
 Win32WindowInfo GetWindowInfo(HWND Window)
@@ -114,28 +107,7 @@ Win32WindowInfo GetWindowInfo(HWND Window)
     return WindowInfo;
 }
 
-struct Win32SoundOutput
-{
-	int16 ToneVolume = 3000;
-	int ToneHertz = 240;
-	int SamplesPerSecond = 48000;
-	int WavePeriod = SamplesPerSecond / ToneHertz;
-	int BytesPerSample = sizeof(int16) * 2; // 16-bit stereo format, this gives you 2 channels * 2 byte = 4 bytes.
-	uint32 RunningSampleIndex = 0;
-	int32 SecondaryBufferSize = SamplesPerSecond * BytesPerSample;
-    real32 tSine = 0.0f;
-    int LatencySampleCount = SamplesPerSecond / 15;
-};
 
-struct Win32OffScreenBuffer
-{
-    BITMAPINFO Info;
-    void* Memory;
-    int Width;
-    int Height;
-    int Pitch;
-    int BytesPerPixel = 4;
-};
 
 Win32OffScreenBuffer GlobalBackBuffer;
 
@@ -606,10 +578,33 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WPara
     return Result;
 }
 
-void ProccessInput(Win32SoundOutput& SoundOutput)
+internal void Win32ProccessXInputDigitalButton(DWORD XInputButtonState, const GameButtonState& OldState, DWORD ButtonBit, GameButtonState& newState)
 {
-	for (DWORD ControllerIndex = 0; ControllerIndex < XUSER_MAX_COUNT; ControllerIndex++)
+    if (XInputButtonState & ButtonBit)
+    {
+        newState.EndedDown = true;
+    }
+
+    newState.EndedDown = ((XInputButtonState & ButtonBit) == ButtonBit);
+    newState.HalfTransitionCount = (OldState.EndedDown != newState.EndedDown) ? 1 : 0;
+}
+
+void ProccessInput(GameInput& OldInput, GameInput& NewInput, Win32SoundOutput& SoundOutput)
+{
+    DWORD MaxControllerCount = XUSER_MAX_COUNT;
+
+    if (MaxControllerCount > ArrayCount(NewInput.Controllers))
+    {
+        MaxControllerCount = ArrayCount(NewInput.Controllers);
+    }
+
+	for (DWORD ControllerIndex = 0; ControllerIndex < MaxControllerCount; ControllerIndex++)
 	{
+        GameControllerInput OldController = OldInput.Controllers[ControllerIndex];
+        GameControllerInput& NewController = NewInput.Controllers[ControllerIndex];
+
+        NewController.IsAnalog = true;
+
 		XINPUT_STATE ControllerState;
 		DWORD Success = XInputGetState(ControllerIndex, &ControllerState);
 		if (Success == ERROR_SUCCESS)
@@ -634,7 +629,45 @@ void ProccessInput(Win32SoundOutput& SoundOutput)
 			bool Left = GamePad.wButtons & XINPUT_GAMEPAD_DPAD_LEFT;
 			bool Right = GamePad.wButtons & XINPUT_GAMEPAD_DPAD_RIGHT;
 
-            // XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE  7849
+            Win32ProccessXInputDigitalButton(GamePad.wButtons, OldController.Down, XINPUT_GAMEPAD_A, NewController.Down);
+            Win32ProccessXInputDigitalButton(GamePad.wButtons, OldController.Right, XINPUT_GAMEPAD_B, NewController.Right);
+            Win32ProccessXInputDigitalButton(GamePad.wButtons, OldController.Left, XINPUT_GAMEPAD_X, NewController.Left);
+            Win32ProccessXInputDigitalButton(GamePad.wButtons, OldController.Up, XINPUT_GAMEPAD_Y, NewController.Up);
+            Win32ProccessXInputDigitalButton(GamePad.wButtons, OldController.LeftShoulder, XINPUT_GAMEPAD_LEFT_SHOULDER , NewController.LeftShoulder);
+            Win32ProccessXInputDigitalButton(GamePad.wButtons, OldController.RightShoulder, XINPUT_GAMEPAD_RIGHT_SHOULDER, NewController.RightShoulder);
+
+            real32 X = 0.0f;
+
+            if (GamePad.sThumbLX < 0)
+            {
+                X = (real32)GamePad.sThumbLX / 32768.0f;
+            }
+            else
+            {
+                X = (real32)GamePad.sThumbLX / 32767.0f;
+            }
+
+            NewController.StartX = OldController.EndX;
+
+            NewController.MinX = NewController.MaxX = NewController.EndX = X;
+
+			real32 Y = 0.0f;
+
+			if (GamePad.sThumbLY < 0)
+			{
+                Y = (real32)GamePad.sThumbLY / 32768.0f;
+			}
+			else
+			{
+                Y = (real32)GamePad.sThumbLY / 32767.0f;
+			}
+
+			NewController.StartY = OldController.EndY;
+
+			NewController.MinY = NewController.MaxY = NewController.EndY = Y;
+
+
+            // XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE  7849 
             // XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE 8689
 			int16 ThumbLeftX = GamePad.sThumbLX;
             int16 ThumbLeftY = GamePad.sThumbLY;
@@ -711,6 +744,10 @@ void ProccessInput(Win32SoundOutput& SoundOutput)
 			// NOTE(Princerin): The controller is not available.
 		}
 	}
+
+    GameInput TempInput = NewInput;
+    NewInput = OldInput;
+    OldInput = TempInput;
 }
 
 void Render()
@@ -869,6 +906,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
         {
             MSG Message {};
 
+            GameInput Input[2];
+
+            GameInput NewInput = Input[0];
+            GameInput OldInput = Input[1];
+
             srand((uint32)time(nullptr));
 
             Timer GameTimer;
@@ -920,7 +962,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
                             //RenderPureColorUInt8(255, 0, 0);
                             //RenderPureColorUInt32(255, 0, 0);
 
-                            ProccessInput(SoundOutput);
+                            ProccessInput(OldInput, NewInput, SoundOutput);
 
 							// NOTE(Princerin): DirectSound output test.
                             DWORD BytesToLock = 0;
@@ -941,10 +983,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 							Buffer.Height = GlobalBackBuffer.Height;
 							Buffer.Pitch = GlobalBackBuffer.Pitch;
 
-                            XOffset = sin(GameTimer.GetElapsedTime() / 1000.0) * 1000.0;
+                            XOffset = (int)(sin(GameTimer.GetElapsedTime() / 1000.0) * 1000.0);
                             //YOffset = sin(GameTimer.GetElapsedTime() / 1000.0) * 1000.0;
 
-							GameUpdateAndRender(Buffer, XOffset, YOffset, SoundBuffer);
+							GameUpdateAndRender(NewInput, Buffer, SoundBuffer);
 
                             if (SoundIsValid)
                             {

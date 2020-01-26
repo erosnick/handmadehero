@@ -1,10 +1,9 @@
 #include "handmade.h"
 
-internal void GameOutputSound(const GameSoundOutputBuffer& SoundBuffer)
+internal void GameOutputSound(const GameSoundOutputBuffer& SoundBuffer, int32 ToneHerz)
 {
     local_persist real32 tSine;
     int16 ToneVolume = 3000;
-    int32 ToneHerz = 240;
     int32 WavePeriod = SoundBuffer.SamplesPerSecond / ToneHerz;
 
     int16* SampleOut = SoundBuffer.Samples;
@@ -45,8 +44,30 @@ internal void RenderWeirdGradient(GameOffScreenBuffer& Buffer, int GreenOffset, 
     }
 }
 
-void GameUpdateAndRender(GameOffScreenBuffer& Buffer, int GreenOffset, int BlueOffset, const GameSoundOutputBuffer& SoundBuffer)
+void GameUpdateAndRender(const GameInput& Input, GameOffScreenBuffer& Buffer, const GameSoundOutputBuffer& SoundBuffer)
 {
+    local_persist int BlueOffset = 0;
+    local_persist int GreenOffset = 0;
+    local_persist int ToneHerz = 240;
+
+    GameControllerInput Input0 = Input.Controllers[0];
+    
+    if (Input0.IsAnalog)
+    {
+        // NOTE(Princerin): Use analog movement tuning.
+        ToneHerz = 240 + (int)(128.0f * Input0.EndY);
+        BlueOffset += (int)(4.0f * Input0.EndX);
+    }
+    else
+    {
+        // NOTE(Princerin): Use digital movement tuning.
+    }
+
+    if (Input0.Down.EndedDown)
+    {
+        GreenOffset += 1;
+    }
+
     RenderWeirdGradient(Buffer, GreenOffset, BlueOffset);
-    GameOutputSound(SoundBuffer);
+    GameOutputSound(SoundBuffer, ToneHerz);
 }

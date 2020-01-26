@@ -1,5 +1,7 @@
 #pragma once
 
+#define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
+
 /*
 TODO(Princerin): Services that the platform layer provides to the game.
 */
@@ -24,6 +26,41 @@ struct GameSoundOutputBuffer
 	int32 SampleCount;
 };
 
-void GameOutputSound(const GameSoundOutputBuffer& SoundBuffer);
+struct GameButtonState
+{
+	int HalfTransitionCount = 0;
+	bool EndedDown = false;
+};
 
-void GameUpdateAndRender(GameOffScreenBuffer& Buffer, int GreenOffset, int BlueOffset, const GameSoundOutputBuffer& SoundBuffer);
+struct GameControllerInput
+{
+	bool IsAnalog = false;
+
+	real32 StartX = 0.0f;
+	real32 StartY = 0.0f;
+
+	real32 MinX = 0.0f;
+	real32 MinY = 0.0f;
+
+	real32 MaxX = 0.0f;
+	real32 MaxY = 0.0f;
+
+	real32 EndX = 0.0f;
+	real32 EndY = 0.0f;
+
+	GameButtonState Up;
+	GameButtonState Down;
+	GameButtonState Left;
+	GameButtonState Right;
+	GameButtonState LeftShoulder;
+	GameButtonState RightShoulder;
+};
+
+struct GameInput
+{
+	GameControllerInput Controllers[4];
+};
+
+void GameOutputSound(const GameSoundOutputBuffer& SoundBuffer, int32 ToneHerz);
+
+void GameUpdateAndRender(const GameInput& Input, GameOffScreenBuffer& Buffer, const GameSoundOutputBuffer& SoundBuffer, int32 ToneHerz);

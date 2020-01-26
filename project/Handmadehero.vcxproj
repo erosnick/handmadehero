@@ -147,6 +147,7 @@
   <ItemGroup>
     <ClInclude Include="..\code\handmade.h" />
     <ClInclude Include="..\code\Timer.h" />
+    <ClInclude Include="..\code\win32_handmade.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
