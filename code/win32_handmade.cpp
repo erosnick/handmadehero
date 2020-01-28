@@ -931,6 +931,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
             int64 LastCycleCount = __rdtsc();
 
+            GameMemroy Memory{ };
+
+            Memory.PermanentStorageSize = Megabytes(64);
+            Memory.PermanentStorage = VirtualAlloc(0, Memory.PermanentStorageSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+
             while (Message.message != WM_QUIT && Running)
             {
                 // Pass NULL instead of the window - handle to PeekMessage / GetMessage.
@@ -986,7 +991,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
                             XOffset = (int)(sin(GameTimer.GetElapsedTime() / 1000.0) * 1000.0);
                             //YOffset = sin(GameTimer.GetElapsedTime() / 1000.0) * 1000.0;
 
-							GameUpdateAndRender(NewInput, Buffer, SoundBuffer);
+							GameUpdateAndRender(Memory, NewInput, Buffer, SoundBuffer);
 
                             if (SoundIsValid)
                             {

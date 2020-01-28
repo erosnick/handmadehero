@@ -8,13 +8,15 @@ internal void GameOutputSound(const GameSoundOutputBuffer& SoundBuffer, int32 To
 
     int16* SampleOut = SoundBuffer.Samples;
 
+    real32 Delta = 2.0f * PI * 1.0f / (real32)WavePeriod;
+
     for (int SampleIndex = 0; SampleIndex < SoundBuffer.SampleCount; SampleIndex++)
     {
         real32 SineValue = sinf(tSine);
         int16 SampleValue = (int16)(SineValue * ToneVolume);
         *SampleOut++ = SampleValue;
         *SampleOut++ = SampleValue;
-        tSine += 2.0f * PI * 1.0f / (real32)WavePeriod;
+        tSine += Delta;
     }
 }
 
@@ -44,19 +46,27 @@ internal void RenderWeirdGradient(GameOffScreenBuffer& Buffer, int GreenOffset, 
     }
 }
 
-void GameUpdateAndRender(const GameInput& Input, GameOffScreenBuffer& Buffer, const GameSoundOutputBuffer& SoundBuffer)
+void GameUpdateAndRender(GameMemroy& Memory, const GameInput& Input, GameOffScreenBuffer& Buffer, const GameSoundOutputBuffer& SoundBuffer)
 {
-    local_persist int BlueOffset = 0;
-    local_persist int GreenOffset = 0;
-    local_persist int ToneHerz = 240;
+    GameState* State = (GameState*)Memory.PermanentStorage;
+
+    if (!Memory.IsInitialized)
+    {
+        State->ToneHerz = 240;
+        State->GreenOffset = 0;
+        State->BlueOffset = 0;
+
+        // TODO(Princerin): This may be more appropriate to do in the platform layer
+        Memory.IsInitialized = true;
+    }
 
     GameControllerInput Input0 = Input.Controllers[0];
     
     if (Input0.IsAnalog)
     {
         // NOTE(Princerin): Use analog movement tuning.
-        ToneHerz = 240 + (int)(128.0f * Input0.EndY);
-        BlueOffset += (int)(4.0f * Input0.EndX);
+        State->ToneHerz = 240 + (int)(128.0f * Input0.EndY);
+        State->BlueOffset += (int)(4.0f * Input0.EndX);
     }
     else
     {
@@ -65,9 +75,9 @@ void GameUpdateAndRender(const GameInput& Input, GameOffScreenBuffer& Buffer, co
 
     if (Input0.Down.EndedDown)
     {
-        GreenOffset += 1;
+        State->GreenOffset += 1;
     }
 
-    RenderWeirdGradient(Buffer, GreenOffset, BlueOffset);
-    GameOutputSound(SoundBuffer, ToneHerz);
+    RenderWeirdGradient(Buffer, State->GreenOffset, State->BlueOffset);
+    GameOutputSound(SoundBuffer, State->ToneHerz);
 }

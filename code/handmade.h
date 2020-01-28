@@ -2,6 +2,9 @@
 
 #define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
 
+#define Kilobytes(Value) ((Value) * 1024)
+#define Megabytes(Value) ((Value) * 1024 * 1024)
+#define Gigabytes(Value) ((Value) * 1024 * 1024 * 1024)
 /*
 TODO(Princerin): Services that the platform layer provides to the game.
 */
@@ -61,6 +64,20 @@ struct GameInput
 	GameControllerInput Controllers[4];
 };
 
+struct GameState
+{
+	int32 BlueOffset = 0;
+	int32 GreenOffset = 0;
+	int32 ToneHerz = 240;
+};
+
+struct GameMemroy
+{
+	bool IsInitialized = false;
+	uint64 PermanentStorageSize = 0;
+	void* PermanentStorage = nullptr;
+};
+
 void GameOutputSound(const GameSoundOutputBuffer& SoundBuffer, int32 ToneHerz);
 
-void GameUpdateAndRender(const GameInput& Input, GameOffScreenBuffer& Buffer, const GameSoundOutputBuffer& SoundBuffer, int32 ToneHerz);
+void GameUpdateAndRender(GameMemroy& Memory, const GameInput& Input, GameOffScreenBuffer& Buffer, const GameSoundOutputBuffer& SoundBuffer, int32 ToneHerz);
