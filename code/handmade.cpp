@@ -48,6 +48,8 @@ internal void RenderWeirdGradient(GameOffScreenBuffer& Buffer, int GreenOffset, 
 
 void GameUpdateAndRender(GameMemroy& Memory, const GameInput& Input, GameOffScreenBuffer& Buffer, const GameSoundOutputBuffer& SoundBuffer)
 {
+    Assert(sizeof(GameState) <= Memory.PermanentStorageSize);
+
     GameState* State = (GameState*)Memory.PermanentStorage;
 
     if (!Memory.IsInitialized)

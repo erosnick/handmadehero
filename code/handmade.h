@@ -1,10 +1,31 @@
 #pragma once
 
+/*
+	NOTE(Princerin):
+	
+	HANDMADE_INTERNAL:
+		0 - Build for public release
+		1 - Build for developer only
+
+	HANDMADE_SLOW:
+		0 - Not slow code allowed!
+		1 - Slow code welcome
+*/
+
 #define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
 
-#define Kilobytes(Value) ((Value) * 1024)
-#define Megabytes(Value) ((Value) * 1024 * 1024)
-#define Gigabytes(Value) ((Value) * 1024 * 1024 * 1024)
+#if _DEBUG
+#define Assert(Expression) \
+if (!(Expression)) { *(int*)0 = 0; }
+#else
+#define Assert(Expression)
+#endif
+
+
+#define Kilobytes(Value) ((uint64)(Value) * 1024)		// Force uint64, avoid signed integral constant overflow
+#define Megabytes(Value) (Kilobytes(Value) * 1024)
+#define Gigabytes(Value) (Megabytes(Value) * 1024)
+#define Terabytes(Value) (Gigabytes(Value) * 1024)
 /*
 TODO(Princerin): Services that the platform layer provides to the game.
 */
@@ -75,7 +96,11 @@ struct GameMemroy
 {
 	bool IsInitialized = false;
 	uint64 PermanentStorageSize = 0;
+	// NOTE(Princerin): REQUIRED to be cleared to zero at startup
 	void* PermanentStorage = nullptr;
+
+	uint64 TransientStorageSize;
+	void* TransientStorage;
 };
 
 void GameOutputSound(const GameSoundOutputBuffer& SoundBuffer, int32 ToneHerz);

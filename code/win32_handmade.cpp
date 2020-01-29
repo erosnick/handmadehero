@@ -931,10 +931,22 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
             int64 LastCycleCount = __rdtsc();
 
+#if HANDMADE_INTERNAL
+            LPVOID BaseAddress = (LPVOID)Terabytes(2);
+#else
+            LPVOID BaseAddress = 0;
+#endif      
+
             GameMemroy Memory{ };
 
             Memory.PermanentStorageSize = Megabytes(64);
-            Memory.PermanentStorage = VirtualAlloc(0, Memory.PermanentStorageSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+            Memory.TransientStorageSize = Gigabytes(4);
+
+            uint64 TotalSize = Memory.PermanentStorageSize + Memory.TransientStorageSize;
+
+            Memory.PermanentStorage = VirtualAlloc(BaseAddress, TotalSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+
+            Memory.TransientStorage = (uint8*)Memory.PermanentStorage + Memory.PermanentStorageSize;
 
             while (Message.message != WM_QUIT && Running)
             {
