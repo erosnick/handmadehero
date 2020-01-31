@@ -948,7 +948,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
             Memory.TransientStorage = (uint8*)Memory.PermanentStorage + Memory.PermanentStorageSize;
 
-            while (Message.message != WM_QUIT && Running) 
+            while (Message.message != WM_QUIT && Running)
             {
                 // Pass NULL instead of the window - handle to PeekMessage / GetMessage.
                 // WM_QUIT does not belong to a window, and is also sent after the window 
