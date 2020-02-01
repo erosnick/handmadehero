@@ -85,6 +85,78 @@ global_variable FPXInputSetState* XInputSetStateDLL = XInputSetStateStub;
 #define XInputGetState XInputGetStateDLL
 #define XInputSetState XInputSetStateDLL
 
+internal void* DebugPlatformReadEntireFile(const char* FileName)
+{
+    DebugReadFileResult Result {};
+
+    wchar_t Buffer[256];
+
+    swprintf_s(Buffer, L"%hs", FileName);
+
+    HANDLE FileHandle = CreateFile(Buffer, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
+
+    if (FileHandle != INVALID_HANDLE_VALUE)
+    {
+        LARGE_INTEGER FileSize;
+        if (GetFileSizeEx(FileHandle, &FileSize))
+        {
+            uint32 FileSize32 = SafeTruncateUInt64(FileSize.QuadPart);
+            Result.Contents = VirtualAlloc(nullptr, FileSize32, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+
+            if (Result.Contents)
+            {
+                DWORD BytesRead = 0;
+
+                if (ReadFile(FileHandle, Result.Contents, FileSize32, &BytesRead, nullptr))
+                {
+                    Result.ContentsSize = FileSize32;
+                }
+                else
+                {
+                    DebugPlatformFreeFileMemory(Result.Contents);
+                    Result.Contents = nullptr;
+                }
+            }
+        }
+    }
+
+    CloseHandle(FileHandle);
+
+    return Result;
+}
+
+internal void DebugPlatformFreeFileMemory(void* Memory)
+{
+    VirtualFree(Memory, 0, MEM_RELEASE);
+}
+
+internal bool DebugPlatformWriteEntireFile(const char* FileName, uint32 MemorySize, void* Memory)
+{
+    bool Result = false;
+
+	wchar_t Buffer[256];
+
+	swprintf_s(Buffer, L"%hs", FileName);
+
+	HANDLE FileHandle = CreateFile(Buffer, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
+
+    if (FileHandle != INVALID_HANDLE_VALUE)
+    {
+        DWORD BytesWritten = 0;
+
+        if (WriteFile(FileHandle, Memory, MemorySize, &BytesWritten, 0))
+        {
+            Result = (BytesWritten == MemorySize);
+        }
+        else
+        {
+
+        }
+
+        CloseHandle(FileHandle);
+    }
+}
+
 Win32WindowInfo WindowInfo {};
 
 Win32WindowInfo GetWindowInfo(HWND Window)

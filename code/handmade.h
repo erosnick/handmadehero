@@ -29,6 +29,26 @@ if (!(Expression)) { *(int*)0 = 0; }
 /*
 TODO(Princerin): Services that the platform layer provides to the game.
 */
+#if HANDMADE_INTERNAL
+struct DebugReadFileResult
+{
+	uint32 ContentsSize;
+	void* Contents;
+};
+
+internal DebugReadFileResult DebugPlatformReadEntireFile(const char* FileName);
+internal void DebugPlatformFreeFileMemory(void* Memory);
+internal bool DebugPlatformWriteEntireFile(const char* FileName, uint32 MemorySize, void* Memory);
+#endif
+
+inline uint32 SafeTruncateUInt64(uint64 Value)
+{
+	// TODO(Princerin): Defines for maximum values
+	Assert(Value <= 0xFFFFFFFF);
+	uint32 Result = (uint32)Value;
+	return Result;
+}
+
 /*
 NOTE(Princerin): Services that the game provides to the platform layer.
 */
