@@ -176,7 +176,7 @@ Win32WindowInfo GetWindowInfo(HWND Window)
         WindowInfo.Height = WindowRect.bottom - WindowRect.top;
 	}
 
-    return WindowInfo;
+    return WindowInfo; 
 }
 
 
