@@ -95,7 +95,7 @@ internal void* DebugPlatformReadEntireFile(const char* FileName)
 
     HANDLE FileHandle = CreateFile(Buffer, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
 
-    if (FileHandle != INVALID_HANDLE_VALUE)
+    if (FileHandle != INVALID_HANDLE_VALUE) 
     {
         LARGE_INTEGER FileSize;
         if (GetFileSizeEx(FileHandle, &FileSize))
