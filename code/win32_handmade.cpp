@@ -18,7 +18,7 @@ TODO(Princerin): THIS IS NOT A FINAL PLATFORM LAYER!!!
 
 Just a partial list of stuff!!
 */
- 
+
 #include "../project/resource.h"
 #include <Windows.h>
 #include <cstdint>
