@@ -15,7 +15,7 @@ TODO(Princerin): THIS IS NOT A FINAL PLATFORM LAYER!!!
 - Blit speed improvements (Bitblt)
 - Hardware acceleration (OpenGL or Direct3D or BOTH??)
 - GetKeyboardLayout (for French keyboards, international WASD support)
-
+ 
 Just a partial list of stuff!!
 */
 
