@@ -276,7 +276,7 @@ void RenderPureColorUInt32(uint8 Red, uint8 Green, uint8 Blue)
 			// Pixel in memory: BB GG RR XX
 			// Little Endian Architecture 
 			// 0xXXRRGGBB
-            // (Value << 24)ï¿½ï¿½ï¿½ï¿½XXï¿½ï¿½Öµ
+            // (Value << 24)¾ÍÊÇXXµÄÖµ
             uint32 Color = (Red << 16) + (Green << 8) + Blue;
 			*Pixel = Color;
 
